@@ -1,59 +1,364 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# PHP_Laravel12_Crud_With_Vue.JS
 
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="https://img.shields.io/badge/Laravel-12.x-FF2D20?style=for-the-badge&logo=laravel">
+  <img src="https://img.shields.io/badge/Vue.js-3.x-42b883?style=for-the-badge&logo=vue.js">
+  <img src="https://img.shields.io/badge/Inertia.js-SPA-blueviolet?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Breeze-Auth-success?style=for-the-badge">
 </p>
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+##  Overview
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+This project demonstrates a **complete CRUD (Create, Read, Update, Delete)** system
+using **Laravel 12**, **Laravel Breeze**, **Inertia.js**, and **Vue.js**.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+It includes:
+- Authentication (Login / Register)
+- Dashboard
+- Posts CRUD module
+- Vue pages with Tailwind UI
+- SPA-like experience (no page reload)
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+##  Features
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- Laravel 12 backend
+- Breeze authentication
+- Vue 3 + Inertia frontend
+- Full Posts CRUD
+- Form validation
+- Tailwind CSS UI
+- Clean folder structure
 
-## Laravel Sponsors
+---
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+##  Folder Structure
 
-### Premium Partners
+```
+app/
+├── Http/Controllers/PostController.php
+├── Models/Post.php
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+database/
+└── migrations/xxxx_create_posts_table.php
 
-## Contributing
+resources/
+└── js/
+    ├── Pages/
+    │   └── Post/
+    │       ├── Index.vue
+    │       ├── Create.vue
+    │       └── Edit.vue
+    └── Layouts/AuthenticatedLayout.vue
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+routes/
+└── web.php
 
-## Code of Conduct
+.env
+README.md
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+##  Step 1 — Install Laravel 12
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+composer create-project laravel/laravel laravel12-crud
+```
 
-## License
+---
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+##  Step 2 — Database Configuration
+
+Edit `.env` file:
+
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=post
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+Create database **post** in phpMyAdmin or MySQL.
+
+---
+
+##  Step 3 — Install Laravel Breeze (Vue + Inertia)
+
+```bash
+composer require laravel/breeze --dev
+
+php artisan breeze:install
+```
+
+Choose:
+- Vue with Inertia
+- Dark mode (optional)
+
+Install dependencies and migrate:
+
+```bash
+npm install
+
+php artisan migrate
+```
+
+At this stage:
+- Login / Register
+- Dashboard  
+are ready.
+
+---
+
+##  Step 4 — Run Project (Initial Test)
+
+```bash
+npm run dev
+
+php artisan serve
+```
+
+URLs:
+```
+http://localhost:8000
+http://localhost:8000/login
+```
+
+---
+
+##  Step 5 — Create Post Model & Migration
+
+```bash
+php artisan make:model Post -m
+```
+
+### Migration
+
+```php
+Schema::create('posts', function (Blueprint $table) {
+    $table->id();
+    $table->string('title');
+    $table->text('body');
+    $table->timestamps();
+});
+```
+
+Run:
+```bash
+php artisan migrate
+```
+
+### Post Model
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Post extends Model
+{
+    use HasFactory;
+
+    // Allow mass assignment for these fields
+    protected $fillable = ['title', 'body'];
+}
+
+```
+
+---
+
+##  Step 6 — Create PostController
+
+```bash
+php artisan make:controller PostController
+```
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Post;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+
+class PostController extends Controller
+{
+    // Show all posts
+    public function index()
+    {
+        return Inertia::render('Post/Index', [
+            'posts' => Post::latest()->get()
+        ]);
+    }
+
+    // Show create form
+    public function create()
+    {
+        return Inertia::render('Post/Create');
+    }
+
+    // Store post
+    public function store(Request $request)
+    {
+        $request->validate([
+            'title' => 'required',
+            'body'  => 'required',
+        ]);
+
+        Post::create($request->all());
+
+        return redirect()->route('posts.index');
+    }
+
+    // Show edit form
+    public function edit(Post $post)
+    {
+        return Inertia::render('Post/Edit', [
+            'post' => $post
+        ]);
+    }
+
+    // Update post
+    public function update(Request $request, Post $post)
+    {
+        $request->validate([
+            'title' => 'required',
+            'body'  => 'required',
+        ]);
+
+        $post->update($request->all());
+
+        return redirect()->route('posts.index');
+    }
+
+    // Delete post
+    public function destroy(Post $post)
+    {
+        $post->delete();
+
+        return redirect()->back();
+    }
+}
+
+```
+
+---
+
+##  Step 7 — Routes Configuration
+
+```php
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::resource('posts', PostController::class);
+});
+```
+
+---
+
+##  Step 8 — Vue Pages (Main Code)
+
+### 📄 Index.vue
+```vue
+<template>
+  <AuthenticatedLayout>
+    <Link href="/posts/create">Create New Post</Link>
+
+    <table>
+      <tr v-for="post in posts" :key="post.id">
+        <td>{{ post.title }}</td>
+        <td>
+          <Link :href="`/posts/${post.id}/edit`">Edit</Link>
+        </td>
+      </tr>
+    </table>
+  </AuthenticatedLayout>
+</template>
+```
+
+---
+
+### 📄 Create.vue
+```vue
+<template>
+  <AuthenticatedLayout>
+    <form @submit.prevent="submit">
+      <input v-model="form.title" />
+      <textarea v-model="form.body"></textarea>
+      <button>Save</button>
+    </form>
+  </AuthenticatedLayout>
+</template>
+```
+
+---
+
+### 📄 Edit.vue
+```vue
+<template>
+  <AuthenticatedLayout>
+    <form @submit.prevent="submit">
+      <input v-model="form.title" />
+      <textarea v-model="form.body"></textarea>
+      <button>Update</button>
+    </form>
+  </AuthenticatedLayout>
+</template>
+```
+
+---
+
+##  Step 9 — Add Posts Menu
+
+`resources/js/Layouts/AuthenticatedLayout.vue`
+
+```vue
+<NavLink 
+  :href="route('posts.index')" 
+  :active="route().current('posts.*')"
+>
+  Posts
+</NavLink>
+```
+
+---
+
+##  Step 10 — Final Run
+
+```bash
+npm run dev
+
+php artisan serve
+```
+
+URLs:
+```
+http://localhost:8000/posts
+```
+
+---
+POST INDEX PAGE:-
+
+<img width="1699" height="613" alt="Screenshot 2025-12-16 141034" src="https://github.com/user-attachments/assets/ee21d071-7d46-46bd-9c84-38cf890f5fb2" />
+
+CREATE POST PAGE:-
+
+<img width="1719" height="695" alt="Screenshot 2025-12-16 144351" src="https://github.com/user-attachments/assets/a1c6cac8-2317-4c1e-90b0-e8be518ed78d" />
+
+EDIT POST PAGE:-
+
+<img width="1646" height="663" alt="Screenshot 2025-12-16 141047" src="https://github.com/user-attachments/assets/c3797e1d-6ec2-4e68-8ea0-efcede6cf7cf" />
+
+DATABSE STORE(MY SQL):-
+
+<img width="853" height="285" alt="Screenshot 2025-12-16 141853" src="https://github.com/user-attachments/assets/50caa007-6c9f-4ef3-abcb-00e8961bf1d6" />
+
+
+
