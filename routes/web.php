@@ -11,6 +11,7 @@ use Inertia\Inertia;
 | Welcome Page (Public)
 |--------------------------------------------------------------------------
 */
+
 Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
@@ -41,8 +42,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // Post Statistics
+    Route::get('/post-statistics', [PostController::class, 'statistics'])
+        ->name('posts.statistics');
+
+
     // ✅ Posts CRUD Routes
     Route::resource('posts', PostController::class);
 });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';
