@@ -1,12 +1,12 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
-import { Head, Link, router, useForm } from '@inertiajs/vue3'
-import { ref, watch } from 'vue'
+import { Head, Link, router } from '@inertiajs/vue3'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
     posts: {
-        type: Array,
-        default: () => [],
+        type: Object,
+        required: true,
     },
 
     categories: {
@@ -20,15 +20,43 @@ const props = defineProps({
             search: '',
             category: '',
             status: '',
+            sort: 'latest',
+            per_page: 5,
+            date_from: '',
+            date_to: '',
+            trash: false,
         }),
     },
 })
 
+/*
+|--------------------------------------------------------------------------
+| Filters
+|--------------------------------------------------------------------------
+*/
+
 const search = ref(props.filters.search || '')
 const category = ref(props.filters.category || '')
 const status = ref(props.filters.status || '')
+const sort = ref(props.filters.sort || 'latest')
+const perPage = ref(Number(props.filters.per_page || 5))
+const dateFrom = ref(props.filters.date_from || '')
+const dateTo = ref(props.filters.date_to || '')
+const showTrash = ref(Boolean(props.filters.trash))
 
-let searchTimer = null
+/*
+|--------------------------------------------------------------------------
+| Selected Posts
+|--------------------------------------------------------------------------
+*/
+
+const selectedPosts = ref([])
+
+/*
+|--------------------------------------------------------------------------
+| Apply Filters
+|--------------------------------------------------------------------------
+*/
 
 const applyFilters = () => {
     router.get(
@@ -37,6 +65,11 @@ const applyFilters = () => {
             search: search.value || undefined,
             category: category.value || undefined,
             status: status.value || undefined,
+            sort: sort.value || undefined,
+            per_page: perPage.value || undefined,
+            date_from: dateFrom.value || undefined,
+            date_to: dateTo.value || undefined,
+            trash: showTrash.value ? 1 : undefined,
         },
         {
             preserveState: true,
@@ -46,33 +79,243 @@ const applyFilters = () => {
     )
 }
 
-watch(search, () => {
-    clearTimeout(searchTimer)
+/*
+|--------------------------------------------------------------------------
+| Search
+|--------------------------------------------------------------------------
+*/
 
-    searchTimer = setTimeout(() => {
+let searchTimeout = null
+
+watch(search, () => {
+    clearTimeout(searchTimeout)
+
+    searchTimeout = setTimeout(() => {
         applyFilters()
     }, 400)
 })
 
-watch([category, status], () => {
-    applyFilters()
-})
+/*
+|--------------------------------------------------------------------------
+| Other Filters
+|--------------------------------------------------------------------------
+*/
+
+watch(
+    [
+        category,
+        status,
+        sort,
+        perPage,
+        dateFrom,
+        dateTo,
+        showTrash,
+    ],
+    () => {
+        applyFilters()
+    }
+)
+
+/*
+|--------------------------------------------------------------------------
+| Clear Filters
+|--------------------------------------------------------------------------
+*/
 
 const clearFilters = () => {
     search.value = ''
     category.value = ''
     status.value = ''
+    sort.value = 'latest'
+    perPage.value = 5
+    dateFrom.value = ''
+    dateTo.value = ''
+    showTrash.value = false
+
+    applyFilters()
 }
 
-const form = useForm({})
+/*
+|--------------------------------------------------------------------------
+| Select All
+|--------------------------------------------------------------------------
+*/
 
-const deletePost = (id) => {
-    if (confirm('Are you sure you want to delete this post?')) {
-        form.delete(route('posts.destroy', id), {
-            preserveScroll: true,
-        })
+const allSelected = computed(() => {
+    return (
+        props.posts.data.length > 0 &&
+        selectedPosts.value.length === props.posts.data.length
+    )
+})
+
+const toggleSelectAll = () => {
+    if (allSelected.value) {
+        selectedPosts.value = []
+    } else {
+        selectedPosts.value = props.posts.data.map((post) => post.id)
     }
 }
+
+/*
+|--------------------------------------------------------------------------
+| Delete Single Post
+|--------------------------------------------------------------------------
+*/
+
+const deletePost = (id) => {
+    if (!confirm('Are you sure you want to move this post to trash?')) {
+        return
+    }
+
+    router.delete(route('posts.destroy', id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            selectedPosts.value = []
+        },
+    })
+}
+
+/*
+|--------------------------------------------------------------------------
+| Restore Post
+|--------------------------------------------------------------------------
+*/
+
+const restorePost = (id) => {
+    if (!confirm('Are you sure you want to restore this post?')) {
+        return
+    }
+
+    router.post(
+        route('posts.restore', id),
+        {},
+        {
+            preserveScroll: true,
+        }
+    )
+}
+
+/*
+|--------------------------------------------------------------------------
+| Bulk Delete
+|--------------------------------------------------------------------------
+*/
+
+const bulkDelete = () => {
+    if (selectedPosts.value.length === 0) {
+        alert('Please select at least one post.')
+        return
+    }
+
+    if (
+        !confirm(
+            `Are you sure you want to move ${selectedPosts.value.length} post(s) to trash?`
+        )
+    ) {
+        return
+    }
+
+    router.post(
+        route('posts.bulk-delete'),
+        {
+            ids: selectedPosts.value,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                selectedPosts.value = []
+            },
+        }
+    )
+}
+
+/*
+|--------------------------------------------------------------------------
+| Export CSV
+|--------------------------------------------------------------------------
+*/
+
+const exportCsv = () => {
+    const params = new URLSearchParams()
+
+    if (search.value) {
+        params.append('search', search.value)
+    }
+
+    if (category.value) {
+        params.append('category', category.value)
+    }
+
+    if (status.value) {
+        params.append('status', status.value)
+    }
+
+    if (sort.value) {
+        params.append('sort', sort.value)
+    }
+
+    if (dateFrom.value) {
+        params.append('date_from', dateFrom.value)
+    }
+
+    if (dateTo.value) {
+        params.append('date_to', dateTo.value)
+    }
+
+    window.location.href =
+        route('posts.export') + '?' + params.toString()
+}
+
+/*
+|--------------------------------------------------------------------------
+| Pagination
+|--------------------------------------------------------------------------
+*/
+
+const pages = computed(() => {
+    const totalPages = Number(props.posts.last_page || 1)
+
+    return Array.from(
+        { length: totalPages },
+        (_, index) => index + 1
+    )
+})
+
+const goToPage = (page) => {
+    if (
+        page < 1 ||
+        page > props.posts.last_page ||
+        page === props.posts.current_page
+    ) {
+        return
+    }
+
+    router.get(
+        route('posts.index'),
+        {
+            page: page,
+            search: search.value || undefined,
+            category: category.value || undefined,
+            status: status.value || undefined,
+            sort: sort.value || undefined,
+            per_page: perPage.value || undefined,
+            date_from: dateFrom.value || undefined,
+            date_to: dateTo.value || undefined,
+            trash: showTrash.value ? 1 : undefined,
+        },
+        {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        }
+    )
+}
+
+/*
+|--------------------------------------------------------------------------
+| Status Class
+|--------------------------------------------------------------------------
+*/
 
 const statusClass = (postStatus) => {
     switch (postStatus) {
@@ -83,87 +326,95 @@ const statusClass = (postStatus) => {
             return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
 
         case 'archived':
-            return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+            return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
 
         default:
-            return 'bg-gray-100 text-gray-700'
+            return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
     }
 }
 </script>
 
 <template>
-    <Head title="Manage Posts" />
+    <Head title="Posts" />
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div
+                class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+            >
                 <div>
-                    <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-200">
-                        Manage Posts
+                    <h2
+                        class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200"
+                    >
+                        Posts
                     </h2>
 
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        Search, filter and manage your posts
+                    <p
+                        class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+                    >
+                        Manage your posts
                     </p>
                 </div>
 
-                <div class="flex gap-2">
-                    <Link
-                        :href="route('posts.statistics')"
-                        class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
-                    >
-                        📊 Statistics
-                    </Link>
-
+                <div class="flex flex-wrap gap-2">
                     <Link
                         :href="route('posts.create')"
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
                     >
                         + Create Post
                     </Link>
+
+                    <button
+                        type="button"
+                        @click="exportCsv"
+                        class="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+                    >
+                        Export CSV
+                    </button>
                 </div>
             </div>
         </template>
 
-        <div class="py-10">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="py-8">
+            <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
 
                 <!-- Filters -->
-                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div
+                    class="rounded-xl bg-white p-5 shadow-sm dark:bg-gray-800"
+                >
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 
                         <!-- Search -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                🔎 Search Posts
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Search
                             </label>
 
-                            <div class="relative">
-                                <input
-                                    v-model="search"
-                                    type="text"
-                                    placeholder="Search title or body..."
-                                    class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white pl-4 pr-10"
-                                />
-
-                                <span class="absolute right-3 top-2.5 text-gray-400">
-                                    🔍
-                                </span>
-                            </div>
+                            <input
+                                v-model="search"
+                                type="text"
+                                placeholder="Search title or body..."
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            />
                         </div>
 
                         <!-- Category -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                🏷️ Category
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Category
                             </label>
 
                             <select
                                 v-model="category"
-                                class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                             >
-                                <option value="">All Categories</option>
+                                <option value="">
+                                    All Categories
+                                </option>
 
                                 <option
                                     v-for="item in categories"
@@ -177,172 +428,404 @@ const statusClass = (postStatus) => {
 
                         <!-- Status -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                📌 Status
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Status
                             </label>
 
                             <select
                                 v-model="status"
-                                class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                             >
-                                <option value="">All Statuses</option>
-                                <option value="published">Published</option>
-                                <option value="draft">Draft</option>
-                                <option value="archived">Archived</option>
+                                <option value="">
+                                    All Status
+                                </option>
+
+                                <option value="published">
+                                    Published
+                                </option>
+
+                                <option value="draft">
+                                    Draft
+                                </option>
+
+                                <option value="archived">
+                                    Archived
+                                </option>
                             </select>
                         </div>
 
+                        <!-- Sorting -->
+                        <div>
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Sort
+                            </label>
+
+                            <select
+                                v-model="sort"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="latest">
+                                    Newest First
+                                </option>
+
+                                <option value="oldest">
+                                    Oldest First
+                                </option>
+
+                                <option value="title_asc">
+                                    Title A-Z
+                                </option>
+
+                                <option value="title_desc">
+                                    Title Z-A
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Per Page -->
+                        <div>
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Per Page
+                            </label>
+
+                            <select
+                                v-model="perPage"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            >
+                                <option :value="5">5</option>
+                                <option :value="10">10</option>
+                                <option :value="25">25</option>
+                                <option :value="50">50</option>
+                            </select>
+                        </div>
+
+                        <!-- Date From -->
+                        <div>
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Date From
+                            </label>
+
+                            <input
+                                v-model="dateFrom"
+                                type="date"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            />
+                        </div>
+
+                        <!-- Date To -->
+                        <div>
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Date To
+                            </label>
+
+                            <input
+                                v-model="dateTo"
+                                type="date"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            />
+                        </div>
+
+                        <!-- Trash -->
+                        <div class="flex items-end">
+                            <label
+                                class="flex cursor-pointer items-center gap-2"
+                            >
+                                <input
+                                    v-model="showTrash"
+                                    type="checkbox"
+                                    class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500"
+                                />
+
+                                <span
+                                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                >
+                                    Show Trash
+                                </span>
+                            </label>
+                        </div>
                     </div>
 
-                    <div class="mt-4 flex justify-between items-center">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                            Showing {{ posts.length }} result<span v-if="posts.length !== 1">s</span>
-                        </p>
-
+                    <!-- Clear Filters -->
+                    <div class="mt-4 flex justify-end">
                         <button
+                            type="button"
                             @click="clearFilters"
-                            class="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                         >
                             Clear Filters
                         </button>
                     </div>
                 </div>
 
-                <!-- Table -->
-                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+                <!-- Bulk Actions -->
+                <div
+                    v-if="selectedPosts.length > 0 && !showTrash"
+                    class="flex flex-col gap-3 rounded-xl bg-blue-50 p-4 dark:bg-blue-900/20 sm:flex-row sm:items-center sm:justify-between"
+                >
+                    <div
+                        class="text-sm font-medium text-blue-700 dark:text-blue-300"
+                    >
+                        {{ selectedPosts.length }} post(s) selected
+                    </div>
 
+                    <button
+                        type="button"
+                        @click="bulkDelete"
+                        class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                    >
+                        Move Selected to Trash
+                    </button>
+                </div>
+
+                <!-- Posts Table -->
+                <div
+                    class="overflow-hidden rounded-xl bg-white shadow-sm dark:bg-gray-800"
+                >
                     <div class="overflow-x-auto">
-                        <table class="w-full">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
+                                <tr>
+                                    <!-- Select -->
+                                    <th
+                                        v-if="!showTrash"
+                                        class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            :checked="allSelected"
+                                            @change="toggleSelectAll"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                    </th>
 
-                            <thead>
-                                <tr class="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
-
-                                    <th class="text-left px-6 py-4 text-sm font-semibold">
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
                                         ID
                                     </th>
 
-                                    <th class="text-left px-6 py-4 text-sm font-semibold">
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
                                         Title
                                     </th>
 
-                                    <th class="text-left px-6 py-4 text-sm font-semibold">
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
                                         Category
                                     </th>
 
-                                    <th class="text-left px-6 py-4 text-sm font-semibold">
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
                                         Status
                                     </th>
 
-                                    <th class="text-left px-6 py-4 text-sm font-semibold">
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
                                         Created
                                     </th>
 
-                                    <th class="text-right px-6 py-4 text-sm font-semibold">
+                                    <th
+                                        class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
                                         Actions
                                     </th>
-
                                 </tr>
                             </thead>
 
-                            <tbody>
-
+                            <tbody
+                                class="divide-y divide-gray-200 dark:divide-gray-700"
+                            >
                                 <tr
-                                    v-for="post in posts"
+                                    v-for="post in posts.data"
                                     :key="post.id"
-                                    class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    class="hover:bg-gray-50 dark:hover:bg-gray-700/50"
                                 >
+                                    <!-- Checkbox -->
+                                    <td
+                                        v-if="!showTrash"
+                                        class="px-6 py-4"
+                                    >
+                                        <input
+                                            v-model="selectedPosts"
+                                            :value="post.id"
+                                            type="checkbox"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                    </td>
 
-                                    <td class="px-6 py-4 text-sm">
+                                    <!-- ID -->
+                                    <td
+                                        class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100"
+                                    >
                                         #{{ post.id }}
                                     </td>
 
+                                    <!-- Title -->
                                     <td class="px-6 py-4">
-                                        <div class="font-medium text-gray-900 dark:text-white">
+                                        <div
+                                            class="max-w-xs truncate text-sm font-semibold text-gray-900 dark:text-gray-100"
+                                        >
                                             {{ post.title }}
                                         </div>
 
-                                        <div class="text-sm text-gray-500 mt-1 max-w-md truncate">
+                                        <div
+                                            class="mt-1 max-w-xs truncate text-xs text-gray-500 dark:text-gray-400"
+                                        >
                                             {{ post.body }}
                                         </div>
                                     </td>
 
-                                    <td class="px-6 py-4">
-                                        <span
-                                            v-if="post.category"
-                                            class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                        >
-                                            {{ post.category.name }}
-                                        </span>
-
-                                        <span
-                                            v-else
-                                            class="text-gray-400 text-sm"
-                                        >
-                                            No category
-                                        </span>
+                                    <!-- Category -->
+                                    <td
+                                        class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-300"
+                                    >
+                                        {{ post.category?.name || 'No category' }}
                                     </td>
 
-                                    <td class="px-6 py-4">
+                                    <!-- Status -->
+                                    <td class="whitespace-nowrap px-6 py-4">
                                         <span
-                                            class="inline-flex px-3 py-1 rounded-full text-xs font-semibold capitalize"
+                                            class="rounded-full px-2.5 py-1 text-xs font-semibold"
                                             :class="statusClass(post.status)"
                                         >
                                             {{ post.status }}
                                         </span>
                                     </td>
 
-                                    <td class="px-6 py-4 text-sm text-gray-500">
-                                        {{ new Date(post.created_at).toLocaleDateString() }}
+                                    <!-- Created -->
+                                    <td
+                                        class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400"
+                                    >
+                                        {{
+                                            new Date(
+                                                post.created_at
+                                            ).toLocaleDateString()
+                                        }}
                                     </td>
 
-                                    <td class="px-6 py-4 text-right whitespace-nowrap">
-
-                                        <Link
-                                            :href="route('posts.edit', post.id)"
-                                            class="inline-block px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm mr-2"
+                                    <!-- Actions -->
+                                    <td
+                                        class="whitespace-nowrap px-6 py-4 text-right"
+                                    >
+                                        <div
+                                            class="flex justify-end gap-2"
                                         >
-                                            Edit
-                                        </Link>
+                                            <!-- Edit -->
+                                            <Link
+                                                v-if="!showTrash"
+                                                :href="
+                                                    route(
+                                                        'posts.edit',
+                                                        post.id
+                                                    )
+                                                "
+                                                class="rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400"
+                                            >
+                                                Edit
+                                            </Link>
 
-                                        <button
-                                            @click="deletePost(post.id)"
-                                            :disabled="form.processing"
-                                            class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm disabled:opacity-50"
-                                        >
-                                            Delete
-                                        </button>
+                                            <!-- Delete -->
+                                            <button
+                                                v-if="!showTrash"
+                                                type="button"
+                                                @click="deletePost(post.id)"
+                                                class="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400"
+                                            >
+                                                Delete
+                                            </button>
 
+                                            <!-- Restore -->
+                                            <button
+                                                v-if="showTrash"
+                                                type="button"
+                                                @click="restorePost(post.id)"
+                                                class="rounded-lg bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400"
+                                            >
+                                                Restore
+                                            </button>
+                                        </div>
                                     </td>
-
                                 </tr>
 
                                 <!-- Empty -->
-                                <tr v-if="posts.length === 0">
+                                <tr v-if="posts.data.length === 0">
                                     <td
-                                        colspan="6"
-                                        class="px-6 py-16 text-center"
+                                        :colspan="showTrash ? 6 : 7"
+                                        class="px-6 py-12 text-center"
                                     >
-                                        <div class="text-5xl mb-4">
-                                            🔍
+                                        <div
+                                            class="text-sm font-medium text-gray-500 dark:text-gray-400"
+                                        >
+                                            No posts found.
                                         </div>
-
-                                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                                            No posts found
-                                        </h3>
-
-                                        <p class="text-gray-500 mt-1">
-                                            Try changing your search or filters.
-                                        </p>
                                     </td>
                                 </tr>
-
                             </tbody>
-
                         </table>
                     </div>
 
-                </div>
+                    <!-- Pagination -->
+                    <div
+                        v-if="
+                            posts.data.length > 0 &&
+                            posts.last_page > 1
+                        "
+                        class="flex flex-col gap-4 border-t p-5 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <!-- Page Information -->
+                        <div
+                            class="text-sm text-gray-500 dark:text-gray-400"
+                        >
+                            Showing
+                            <strong>{{ posts.from }}</strong>
+                            -
+                            <strong>{{ posts.to }}</strong>
+                            of
+                            <strong>{{ posts.total }}</strong>
 
+                            <span class="mx-1">|</span>
+
+                            Page
+                            <strong>{{ posts.current_page }}</strong>
+                            of
+                            <strong>{{ posts.last_page }}</strong>
+                        </div>
+
+                        <!-- Numeric Pagination -->
+                        <div
+                            class="flex flex-wrap items-center gap-2"
+                        >
+                            <button
+                                v-for="page in pages"
+                                :key="page"
+                                type="button"
+                                @click="goToPage(page)"
+                                class="flex h-10 w-10 items-center justify-center rounded-lg border text-sm font-semibold transition"
+                                :class="
+                                    page === posts.current_page
+                                        ? 'border-blue-600 bg-blue-600 text-white'
+                                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                                "
+                            >
+                                {{ page }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </AuthenticatedLayout>
