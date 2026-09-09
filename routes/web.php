@@ -8,7 +8,7 @@ use Inertia\Inertia;
 
 /*
 |--------------------------------------------------------------------------
-| Welcome Page (Public)
+| Welcome Page
 |--------------------------------------------------------------------------
 */
 
@@ -23,9 +23,10 @@ Route::get('/', function () {
 
 /*
 |--------------------------------------------------------------------------
-| Dashboard (Protected)
+| Dashboard
 |--------------------------------------------------------------------------
 */
+
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -35,19 +36,66 @@ Route::get('/dashboard', function () {
 | Authenticated Routes
 |--------------------------------------------------------------------------
 */
+
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    // Profile Routes
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    /*
+    |--------------------------------------------------------------------------
+    | Profile
+    |--------------------------------------------------------------------------
+    */
 
-    // Post Statistics
+    Route::get('/profile', [ProfileController::class, 'edit'])
+        ->name('profile.edit');
+
+    Route::patch('/profile', [ProfileController::class, 'update'])
+        ->name('profile.update');
+
+    Route::delete('/profile', [ProfileController::class, 'destroy'])
+        ->name('profile.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Post Statistics
+    |--------------------------------------------------------------------------
+    */
+
     Route::get('/post-statistics', [PostController::class, 'statistics'])
         ->name('posts.statistics');
 
+    /*
+    |--------------------------------------------------------------------------
+    | Post Export
+    |--------------------------------------------------------------------------
+    */
 
-    // ✅ Posts CRUD Routes
+    Route::get('/posts-export', [PostController::class, 'export'])
+        ->name('posts.export');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Post Restore
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post('/posts/{post}/restore', [PostController::class, 'restore'])
+        ->name('posts.restore');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bulk Delete
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post('/posts/bulk-delete', [PostController::class, 'bulkDelete'])
+        ->name('posts.bulk-delete');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Posts CRUD
+    |--------------------------------------------------------------------------
+    */
+
     Route::resource('posts', PostController::class);
 });
 
