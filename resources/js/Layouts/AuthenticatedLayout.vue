@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import ApplicationLogo from '@/Components/ApplicationLogo.vue'
 import Dropdown from '@/Components/Dropdown.vue'
 import DropdownLink from '@/Components/DropdownLink.vue'
@@ -8,6 +8,30 @@ import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue'
 import { Link } from '@inertiajs/vue3'
 
 const showingNavigationDropdown = ref(false)
+
+const isDark = ref(false)
+
+const toggleDark = () => {
+    isDark.value = !isDark.value
+
+    if (isDark.value) {
+        document.documentElement.classList.add('dark')
+        localStorage.setItem('theme', 'dark')
+    } else {
+        document.documentElement.classList.remove('dark')
+        localStorage.setItem('theme', 'light')
+    }
+}
+
+onMounted(() => {
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        isDark.value = true
+        document.documentElement.classList.add('dark')
+    } else {
+        isDark.value = false
+        document.documentElement.classList.remove('dark')
+    }
+})
 </script>
 
 <template>
@@ -43,7 +67,17 @@ const showingNavigationDropdown = ref(false)
                     </div>
 
                     <!-- Right Side -->
-                    <div class="hidden sm:ms-6 sm:flex sm:items-center">
+                    <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-3">
+                        <button
+                            type="button"
+                            @click="toggleDark"
+                            class="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                            title="Toggle dark mode"
+                        >
+                            <span v-if="!isDark">🌙</span>
+                            <span v-else>☀️</span>
+                        </button>
+
                         <div class="relative ms-3">
                             <Dropdown align="right" width="48">
                                 <template #trigger>
