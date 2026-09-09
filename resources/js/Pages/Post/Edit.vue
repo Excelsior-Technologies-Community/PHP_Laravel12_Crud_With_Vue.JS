@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { Head, useForm, Link } from '@inertiajs/vue3'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
     post: {
@@ -12,17 +13,50 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+
+    tags: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const form = useForm({
     title: props.post.title,
     body: props.post.body,
+    excerpt: props.post.excerpt || '',
+    slug: props.post.slug || '',
+    featured_image: null,
     category_id: props.post.category_id ?? '',
     status: props.post.status ?? 'published',
+    tags: props.post.tags?.map((t) => t.id) || [],
 })
 
+const previewUrl = ref(props.post.featured_image ? `/storage/${props.post.featured_image}` : null)
+
+watch(
+    () => form.title,
+    (newTitle) => {
+        if (!form.slug || form.slug === props.post.slug) {
+            form.slug = newTitle
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+        }
+    }
+)
+
+const handleFileChange = (event) => {
+    const file = event.target.files[0]
+    if (file) {
+        form.featured_image = file
+        previewUrl.value = URL.createObjectURL(file)
+    }
+}
+
 const submit = () => {
-    form.put(route('posts.update', props.post.id))
+    form.put(route('posts.update', props.post.id), {
+        forceFormData: true,
+    })
 }
 </script>
 
@@ -77,6 +111,79 @@ const submit = () => {
                                 </p>
                             </div>
 
+                            <!-- Slug -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Slug
+                                </label>
+
+                                <input
+                                    v-model="form.slug"
+                                    type="text"
+                                    class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                />
+
+                                <p
+                                    v-if="form.errors.slug"
+                                    class="text-red-500 text-sm mt-1"
+                                >
+                                    {{ form.errors.slug }}
+                                </p>
+                            </div>
+
+                            <!-- Excerpt -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Excerpt
+                                </label>
+
+                                <textarea
+                                    v-model="form.excerpt"
+                                    rows="3"
+                                    placeholder="Short description..."
+                                    class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                ></textarea>
+
+                                <p
+                                    v-if="form.errors.excerpt"
+                                    class="text-red-500 text-sm mt-1"
+                                >
+                                    {{ form.errors.excerpt }}
+                                </p>
+                            </div>
+
+                            <!-- Featured Image -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Featured Image
+                                </label>
+
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    @change="handleFileChange"
+                                    class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                />
+
+                                <div
+                                    v-if="previewUrl"
+                                    class="mt-4"
+                                >
+                                    <img
+                                        :src="previewUrl"
+                                        alt="Preview"
+                                        class="h-48 w-full rounded-lg object-cover"
+                                    />
+                                </div>
+
+                                <p
+                                    v-if="form.errors.featured_image"
+                                    class="text-red-500 text-sm mt-1"
+                                >
+                                    {{ form.errors.featured_image }}
+                                </p>
+                            </div>
+
                             <!-- Category -->
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -103,6 +210,38 @@ const submit = () => {
                                     class="text-red-500 text-sm mt-1"
                                 >
                                     {{ form.errors.category_id }}
+                                </p>
+                            </div>
+
+                            <!-- Tags -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Tags
+                                </label>
+
+                                <select
+                                    v-model="form.tags"
+                                    multiple
+                                    class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                >
+                                    <option
+                                        v-for="tag in tags"
+                                        :key="tag.id"
+                                        :value="tag.id"
+                                    >
+                                        {{ tag.name }}
+                                    </option>
+                                </select>
+
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Hold Ctrl (Windows) or Cmd (Mac) to select multiple.
+                                </p>
+
+                                <p
+                                    v-if="form.errors.tags"
+                                    class="text-red-500 text-sm mt-1"
+                                >
+                                    {{ form.errors.tags }}
                                 </p>
                             </div>
 

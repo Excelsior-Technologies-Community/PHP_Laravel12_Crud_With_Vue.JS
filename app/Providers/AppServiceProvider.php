@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\Comment;
+use App\Models\FilterPreset;
+use App\Policies\CommentPolicy;
+use App\Policies\FilterPresetPolicy;
+use Illuminate\Auth\Access\Response;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 
@@ -21,5 +27,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+
+        Gate::policy(FilterPreset::class, FilterPresetPolicy::class);
+        Gate::policy(Comment::class, CommentPolicy::class);
     }
 }

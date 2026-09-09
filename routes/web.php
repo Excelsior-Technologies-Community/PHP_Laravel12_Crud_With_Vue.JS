@@ -56,6 +56,75 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Post Autocomplete
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/posts/autocomplete', [PostController::class, 'autocomplete'])
+        ->name('posts.autocomplete');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Authors & Tags
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/posts/authors', [PostController::class, 'getAuthors'])
+        ->name('posts.authors');
+
+    Route::get('/posts/tags', [PostController::class, 'getTags'])
+        ->name('posts.tags');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Post Engagement
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post('/posts/{post}/view', [PostController::class, 'trackView'])
+        ->name('posts.view');
+
+    Route::post('/posts/{post}/like', [PostController::class, 'toggleLike'])
+        ->name('posts.like');
+
+    Route::post('/posts/{post}/bookmark', [PostController::class, 'toggleBookmark'])
+        ->name('posts.bookmark');
+
+    Route::post('/posts/{post}/comments', [PostController::class, 'storeComment'])
+        ->name('posts.comments.store');
+
+    Route::delete('/posts/comments/{comment}', [PostController::class, 'destroyComment'])
+        ->name('posts.comments.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Filter Presets
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post('/filter-presets', [PostController::class, 'saveFilterPreset'])
+        ->name('filter-presets.store');
+
+    Route::get('/filter-presets', [PostController::class, 'getFilterPresets'])
+        ->name('filter-presets.index');
+
+    Route::get('/filter-presets/{filterPreset}', [PostController::class, 'loadFilterPreset'])
+        ->name('filter-presets.show');
+
+    Route::delete('/filter-presets/{filterPreset}', [PostController::class, 'deleteFilterPreset'])
+        ->name('filter-presets.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Views Analytics
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/posts/views-analytics', [PostController::class, 'getViewsAnalytics'])
+        ->name('posts.views-analytics');
+
+    /*
+    |--------------------------------------------------------------------------
     | Post Statistics
     |--------------------------------------------------------------------------
     */
@@ -97,6 +166,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     */
 
     Route::resource('posts', PostController::class);
+
+    Route::get('/posts/{post:slug}', [PostController::class, 'show'])
+        ->name('posts.show');
 });
 
 require __DIR__ . '/auth.php';

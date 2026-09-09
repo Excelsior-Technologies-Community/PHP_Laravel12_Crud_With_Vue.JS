@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { Head, Link, router } from '@inertiajs/vue3'
 import { computed, ref, watch } from 'vue'
+import axios from 'axios'
 
 const props = defineProps({
     posts: {
@@ -14,18 +15,35 @@ const props = defineProps({
         default: () => [],
     },
 
+    authors: {
+        type: Array,
+        default: () => [],
+    },
+
+    tags: {
+        type: Array,
+        default: () => [],
+    },
+
     filters: {
         type: Object,
         default: () => ({
             search: '',
             category: '',
             status: '',
+            author: '',
+            tag: '',
             sort: 'latest',
             per_page: 5,
             date_from: '',
             date_to: '',
             trash: false,
         }),
+    },
+
+    filterPresets: {
+        type: Array,
+        default: () => [],
     },
 })
 
@@ -38,6 +56,8 @@ const props = defineProps({
 const search = ref(props.filters.search || '')
 const category = ref(props.filters.category || '')
 const status = ref(props.filters.status || '')
+const author = ref(props.filters.author || '')
+const tag = ref(props.filters.tag || '')
 const sort = ref(props.filters.sort || 'latest')
 const perPage = ref(Number(props.filters.per_page || 5))
 const dateFrom = ref(props.filters.date_from || '')
@@ -65,6 +85,8 @@ const applyFilters = () => {
             search: search.value || undefined,
             category: category.value || undefined,
             status: status.value || undefined,
+            author: author.value || undefined,
+            tag: tag.value || undefined,
             sort: sort.value || undefined,
             per_page: perPage.value || undefined,
             date_from: dateFrom.value || undefined,
@@ -105,6 +127,8 @@ watch(
     [
         category,
         status,
+        author,
+        tag,
         sort,
         perPage,
         dateFrom,
@@ -126,6 +150,8 @@ const clearFilters = () => {
     search.value = ''
     category.value = ''
     status.value = ''
+    author.value = ''
+    tag.value = ''
     sort.value = 'latest'
     perPage.value = 5
     dateFrom.value = ''
@@ -133,6 +159,82 @@ const clearFilters = () => {
     showTrash.value = false
 
     applyFilters()
+}
+
+/*
+|--------------------------------------------------------------------------
+| Filter Presets
+|--------------------------------------------------------------------------
+*/
+
+const showPresetInput = ref(false)
+const presetName = ref('')
+
+const savePreset = async () => {
+    if (!presetName.value.trim()) return
+
+    try {
+        await axios.post(route('filter-presets.store'), {
+            name: presetName.value,
+            filters: {
+                search: search.value || undefined,
+                category: category.value || undefined,
+                status: status.value || undefined,
+                author: author.value || undefined,
+                tag: tag.value || undefined,
+                sort: sort.value || undefined,
+                per_page: perPage.value || undefined,
+                date_from: dateFrom.value || undefined,
+                date_to: dateTo.value || undefined,
+                trash: showTrash.value ? 1 : undefined,
+            },
+        })
+
+        presetName.value = ''
+        showPresetInput.value = false
+        await fetchPresets()
+    } catch (error) {
+        console.error('Failed to save preset:', error)
+    }
+}
+
+const presets = ref([...props.filterPresets])
+
+const fetchPresets = async () => {
+    try {
+        const response = await axios.get(route('filter-presets.index'))
+        presets.value = response.data
+    } catch {
+        presets.value = []
+    }
+}
+
+const loadPreset = (preset) => {
+    const f = preset.filters || {}
+
+    search.value = f.search || ''
+    category.value = f.category || ''
+    status.value = f.status || ''
+    author.value = f.author || ''
+    tag.value = f.tag || ''
+    sort.value = f.sort || 'latest'
+    perPage.value = Number(f.per_page || 5)
+    dateFrom.value = f.date_from || ''
+    dateTo.value = f.date_to || ''
+    showTrash.value = Boolean(f.trash)
+
+    applyFilters()
+}
+
+const deletePreset = async (preset) => {
+    if (!confirm('Delete this filter preset?')) return
+
+    try {
+        await axios.delete(route('filter-presets.destroy', preset.id))
+        presets.value = presets.value.filter((p) => p.id !== preset.id)
+    } catch (error) {
+        console.error('Failed to delete preset:', error)
+    }
 }
 
 /*
@@ -250,6 +352,14 @@ const exportCsv = () => {
         params.append('status', status.value)
     }
 
+    if (author.value) {
+        params.append('author', author.value)
+    }
+
+    if (tag.value) {
+        params.append('tag', tag.value)
+    }
+
     if (sort.value) {
         params.append('sort', sort.value)
     }
@@ -297,6 +407,8 @@ const goToPage = (page) => {
             search: search.value || undefined,
             category: category.value || undefined,
             status: status.value || undefined,
+            author: author.value || undefined,
+            tag: tag.value || undefined,
             sort: sort.value || undefined,
             per_page: perPage.value || undefined,
             date_from: dateFrom.value || undefined,
@@ -382,7 +494,7 @@ const statusClass = (postStatus) => {
                 <div
                     class="rounded-xl bg-white p-5 shadow-sm dark:bg-gray-800"
                 >
-                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 
                         <!-- Search -->
                         <div>
@@ -456,6 +568,58 @@ const statusClass = (postStatus) => {
                             </select>
                         </div>
 
+                        <!-- Author -->
+                        <div>
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Author
+                            </label>
+
+                            <select
+                                v-model="author"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="">
+                                    All Authors
+                                </option>
+
+                                <option
+                                    v-for="item in authors"
+                                    :key="item.id"
+                                    :value="item.id"
+                                >
+                                    {{ item.name }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Tag -->
+                        <div>
+                            <label
+                                class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
+                                Tag
+                            </label>
+
+                            <select
+                                v-model="tag"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="">
+                                    All Tags
+                                </option>
+
+                                <option
+                                    v-for="item in tags"
+                                    :key="item.id"
+                                    :value="item.id"
+                                >
+                                    {{ item.name }}
+                                </option>
+                            </select>
+                        </div>
+
                         <!-- Sorting -->
                         <div>
                             <label
@@ -482,6 +646,14 @@ const statusClass = (postStatus) => {
 
                                 <option value="title_desc">
                                     Title Z-A
+                                </option>
+
+                                <option value="most_viewed">
+                                    Most Viewed
+                                </option>
+
+                                <option value="most_liked">
+                                    Most Liked
                                 </option>
                             </select>
                         </div>
@@ -555,8 +727,77 @@ const statusClass = (postStatus) => {
                         </div>
                     </div>
 
-                    <!-- Clear Filters -->
-                    <div class="mt-4 flex justify-end">
+                    <!-- Clear Filters & Save Preset -->
+                    <div class="mt-4 flex flex-wrap items-center justify-end gap-3">
+                        <!-- Filter Presets -->
+                        <div v-if="presets.length" class="flex flex-wrap items-center gap-2">
+                            <span
+                                class="text-xs font-medium text-gray-500 dark:text-gray-400"
+                            >
+                                Presets:
+                            </span>
+
+                            <button
+                                v-for="preset in presets"
+                                :key="preset.id"
+                                type="button"
+                                @click="loadPreset(preset)"
+                                class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                            >
+                                {{ preset.name }}
+                            </button>
+
+                            <button
+                                v-for="preset in presets"
+                                :key="'del-' + preset.id"
+                                type="button"
+                                @click="deletePreset(preset)"
+                                class="rounded-lg border border-red-300 bg-white px-2 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 dark:border-red-700 dark:bg-gray-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                                title="Delete preset"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <button
+                            v-if="!showPresetInput"
+                            type="button"
+                            @click="showPresetInput = true"
+                            class="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:bg-gray-700 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                        >
+                            💾 Save Filter Preset
+                        </button>
+
+                        <div
+                            v-if="showPresetInput"
+                            class="flex items-center gap-2"
+                        >
+                            <input
+                                v-model="presetName"
+                                type="text"
+                                placeholder="Preset name..."
+                                class="rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                @keyup.enter="savePreset"
+                            />
+
+                            <button
+                                type="button"
+                                @click="savePreset"
+                                :disabled="!presetName.value.trim()"
+                                class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                Save
+                            </button>
+
+                            <button
+                                type="button"
+                                @click="showPresetInput = false; presetName = ''"
+                                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+
                         <button
                             type="button"
                             @click="clearFilters"
@@ -612,6 +853,12 @@ const statusClass = (postStatus) => {
                                         class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
                                     >
                                         ID
+                                    </th>
+
+                                    <th
+                                        class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                    >
+                                        View
                                     </th>
 
                                     <th
@@ -674,6 +921,18 @@ const statusClass = (postStatus) => {
                                         #{{ post.id }}
                                     </td>
 
+                                    <!-- View -->
+                                    <td
+                                        class="whitespace-nowrap px-6 py-4 text-center"
+                                    >
+                                        <Link
+                                            :href="route('posts.show', post.slug || post.id)"
+                                            class="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                                        >
+                                            👁 View
+                                        </Link>
+                                    </td>
+
                                     <!-- Title -->
                                     <td class="px-6 py-4">
                                         <div
@@ -724,6 +983,14 @@ const statusClass = (postStatus) => {
                                         <div
                                             class="flex justify-end gap-2"
                                         >
+                                            <!-- View -->
+                                            <Link
+                                                :href="route('posts.show', post.slug || post.id)"
+                                                class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
+                                            >
+                                                View
+                                            </Link>
+
                                             <!-- Edit -->
                                             <Link
                                                 v-if="!showTrash"
@@ -764,7 +1031,7 @@ const statusClass = (postStatus) => {
                                 <!-- Empty -->
                                 <tr v-if="posts.data.length === 0">
                                     <td
-                                        :colspan="showTrash ? 6 : 7"
+                                        :colspan="showTrash ? 7 : 8"
                                         class="px-6 py-12 text-center"
                                     >
                                         <div
