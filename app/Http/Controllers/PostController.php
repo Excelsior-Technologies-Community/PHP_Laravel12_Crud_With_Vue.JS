@@ -3,8 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\Comment;
+use App\Models\FilterPreset;
 use App\Models\Post;
+use App\Models\PostBookmark;
+use App\Models\PostLike;
+use App\Models\PostView;
+use App\Models\Tag;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Intervention\Image\Facades\Image;
 use Inertia\Inertia;
 
 class PostController extends Controller
@@ -17,7 +27,9 @@ class PostController extends Controller
         $search = $request->input('search');
         $category = $request->input('category');
         $status = $request->input('status');
-        $sort = $request->input('sort', 'oldest');
+        $author = $request->input('author');
+        $tag = $request->input('tag');
+        $sort = $request->input('sort', 'latest');
         $perPage = (int) $request->input('per_page', 5);
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
@@ -29,7 +41,7 @@ class PostController extends Controller
             $perPage = 5;
         }
 
-        $query = Post::with('category');
+        $query = Post::with(['category', 'user', 'tags']);
 
         /*
         |--------------------------------------------------------------------------
@@ -72,6 +84,26 @@ class PostController extends Controller
 
         /*
         |--------------------------------------------------------------------------
+        | Author Filter
+        |--------------------------------------------------------------------------
+        */
+        $query->when($author, function ($query, $author) {
+            $query->where('user_id', $author);
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | Tag Filter
+        |--------------------------------------------------------------------------
+        */
+        $query->when($tag, function ($query, $tag) {
+            $query->whereHas('tags', function ($q) use ($tag) {
+                $q->where('tags.id', $tag);
+            });
+        });
+
+        /*
+        |--------------------------------------------------------------------------
         | Date From
         |--------------------------------------------------------------------------
         */
@@ -94,6 +126,10 @@ class PostController extends Controller
         |--------------------------------------------------------------------------
         */
         switch ($sort) {
+            case 'latest':
+                $query->latest();
+                break;
+
             case 'oldest':
                 $query->oldest();
                 break;
@@ -106,9 +142,16 @@ class PostController extends Controller
                 $query->orderBy('title', 'desc');
                 break;
 
-            case 'oldest':
+            case 'most_viewed':
+                $query->orderByDesc('views_count');
+                break;
+
+            case 'most_liked':
+                $query->withCount('likes')->orderByDesc('likes_count');
+                break;
+
             default:
-                $query->oldest();
+                $query->latest();
                 break;
         }
 
@@ -120,17 +163,23 @@ class PostController extends Controller
             'posts' => $posts,
 
             'categories' => Category::orderBy('name')->get(),
+            'authors' => \App\Models\User::whereHas('posts')->orderBy('name')->get(),
+            'tags' => Tag::orderBy('name')->get(),
 
             'filters' => [
                 'search' => $search ?? '',
                 'category' => $category ?? '',
                 'status' => $status ?? '',
+                'author' => $author ?? '',
+                'tag' => $tag ?? '',
                 'sort' => $sort,
                 'per_page' => $perPage,
                 'date_from' => $dateFrom ?? '',
                 'date_to' => $dateTo ?? '',
                 'trash' => $showTrash,
             ],
+
+            'filterPresets' => Auth::user()?->filterPresets ?? [],
         ]);
     }
 
@@ -141,6 +190,7 @@ class PostController extends Controller
     {
         return Inertia::render('Post/Create', [
             'categories' => Category::orderBy('name')->get(),
+            'tags' => Tag::orderBy('name')->get(),
         ]);
     }
 
@@ -152,15 +202,68 @@ class PostController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string'],
+            'excerpt' => ['nullable', 'string', 'max:500'],
+            'slug' => ['nullable', 'string', 'max:255', 'unique:posts,slug'],
+            'featured_image' => ['nullable', 'image', 'max:2048'],
             'category_id' => ['required', 'exists:categories,id'],
             'status' => ['required', 'in:draft,published,archived'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['integer', 'exists:tags,id'],
         ]);
 
-        Post::create($validated);
+        $validated['user_id'] = Auth::id();
+        $validated['slug'] = $validated['slug'] ?: Str::slug($validated['title']);
+
+        if ($request->hasFile('featured_image')) {
+            $image = Image::make($request->file('featured_image'))
+                ->orientate()
+                ->fit(1200, 630, function ($constraint) {
+                    $constraint->upsize();
+                })
+                ->encode('webp', 85);
+
+            $path = 'posts/' . uniqid() . '.webp';
+            Storage::disk('public')->put($path, $image);
+
+            $validated['featured_image'] = $path;
+        }
+
+        $post = Post::create($validated);
+
+        if (!empty($validated['tags'])) {
+            $post->tags()->sync($validated['tags']);
+        }
 
         return redirect()
             ->route('posts.index')
             ->with('success', 'Post created successfully.');
+    }
+
+    /**
+     * Show post.
+     */
+    public function show(Post $post)
+    {
+        $post->load('category', 'user', 'tags', 'likes', 'bookmarks', 'comments.user');
+
+        $post->views_count = $post->views()->count();
+        $post->likes_count = $post->likes()->count();
+        $post->comments_count = $post->comments()->count();
+
+        $userLiked = false;
+        $userBookmarked = false;
+
+        if (Auth::check()) {
+            $userLiked = $post->likes()->where('user_id', Auth::id())->exists();
+            $userBookmarked = $post->bookmarks()->where('user_id', Auth::id())->exists();
+        }
+
+        return Inertia::render('Post/Show', [
+            'post' => $post,
+            'userLiked' => $userLiked,
+            'userBookmarked' => $userBookmarked,
+            'comments' => $post->comments,
+        ]);
     }
 
     /**
@@ -169,8 +272,9 @@ class PostController extends Controller
     public function edit(Post $post)
     {
         return Inertia::render('Post/Edit', [
-            'post' => $post->load('category'),
+            'post' => $post->load('category', 'tags'),
             'categories' => Category::orderBy('name')->get(),
+            'tags' => Tag::orderBy('name')->get(),
         ]);
     }
 
@@ -182,11 +286,36 @@ class PostController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string'],
+            'excerpt' => ['nullable', 'string', 'max:500'],
+            'slug' => ['nullable', 'string', 'max:255', 'unique:posts,slug,' . $post->id],
+            'featured_image' => ['nullable', 'image', 'max:2048'],
             'category_id' => ['required', 'exists:categories,id'],
             'status' => ['required', 'in:draft,published,archived'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['integer', 'exists:tags,id'],
         ]);
 
+        $validated['slug'] = $validated['slug'] ?: Str::slug($validated['title']);
+
+        if ($request->hasFile('featured_image')) {
+            $image = Image::make($request->file('featured_image'))
+                ->orientate()
+                ->fit(1200, 630, function ($constraint) {
+                    $constraint->upsize();
+                })
+                ->encode('webp', 85);
+
+            $path = 'posts/' . uniqid() . '.webp';
+            Storage::disk('public')->put($path, $image);
+
+            $validated['featured_image'] = $path;
+        }
+
         $post->update($validated);
+
+        if (array_key_exists('tags', $validated)) {
+            $post->tags()->sync($validated['tags'] ?? []);
+        }
 
         return redirect()
             ->route('posts.index')
@@ -248,7 +377,7 @@ class PostController extends Controller
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
 
-        $query = Post::with('category');
+        $query = Post::with(['category', 'user']);
 
         $query->when($search, function ($query, $search) {
             $query->where(function ($q) use ($search) {
@@ -303,6 +432,7 @@ class PostController extends Controller
                 'Title',
                 'Body',
                 'Category',
+                'Author',
                 'Status',
                 'Created At',
             ]);
@@ -313,6 +443,7 @@ class PostController extends Controller
                     $post->title,
                     $post->body,
                     $post->category?->name ?? 'No category',
+                    $post->user?->name ?? 'Unknown',
                     ucfirst($post->status),
                     $post->created_at?->format('Y-m-d H:i:s'),
                 ]);
@@ -360,5 +491,219 @@ class PostController extends Controller
 
             'categoryStatistics' => $categoryStatistics,
         ]);
+    }
+
+    /**
+     * Track post view.
+     */
+    public function trackView(Request $request, Post $post)
+    {
+        $userId = Auth::id();
+        $ipAddress = $request->ip();
+        $userAgent = $request->userAgent();
+
+        PostView::updateOrCreate(
+            [
+                'post_id' => $post->id,
+                'user_id' => $userId,
+                'ip_address' => $ipAddress,
+            ],
+            [
+                'user_agent' => $userAgent,
+                'viewed_at' => now(),
+            ]
+        );
+
+        return response()->json([
+            'views' => $post->views()->count(),
+        ]);
+    }
+
+    /**
+     * Toggle like on post.
+     */
+    public function toggleLike(Request $request, Post $post)
+    {
+        $user = Auth::user();
+        $like = $post->likes()->where('user_id', $user->id)->first();
+
+        if ($like) {
+            $like->delete();
+            $liked = false;
+        } else {
+            $post->likes()->create(['user_id' => $user->id]);
+            $liked = true;
+        }
+
+        return response()->json([
+            'liked' => $liked,
+            'likes_count' => $post->likes()->count(),
+        ]);
+    }
+
+    /**
+     * Toggle bookmark on post.
+     */
+    public function toggleBookmark(Request $request, Post $post)
+    {
+        $user = Auth::user();
+        $bookmark = $post->bookmarks()->where('user_id', $user->id)->first();
+
+        if ($bookmark) {
+            $bookmark->delete();
+            $bookmarked = false;
+        } else {
+            $post->bookmarks()->create(['user_id' => $user->id]);
+            $bookmarked = true;
+        }
+
+        return response()->json([
+            'bookmarked' => $bookmarked,
+        ]);
+    }
+
+    /**
+     * Store comment.
+     */
+    public function storeComment(Request $request, Post $post)
+    {
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:1000'],
+            'parent_id' => ['nullable', 'exists:comments,id'],
+        ]);
+
+        $comment = $post->comments()->create([
+            'user_id' => Auth::id(),
+            'body' => $validated['body'],
+            'parent_id' => $validated['parent_id'] ?? null,
+        ]);
+
+        return response()->json([
+            'comment' => $comment->load('user'),
+        ]);
+    }
+
+    /**
+     * Delete comment.
+     */
+    public function destroyComment(Comment $comment)
+    {
+        $this->authorize('delete', $comment);
+        $comment->delete();
+
+        return response()->json([
+            'message' => 'Comment deleted successfully.',
+        ]);
+    }
+
+    /**
+     * Autocomplete search suggestions.
+     */
+    public function autocomplete(Request $request)
+    {
+        $search = $request->input('q', '');
+
+        $posts = Post::where('title', 'like', "%{$search}%")
+            ->where('status', 'published')
+            ->limit(10)
+            ->get(['id', 'title', 'slug']);
+
+        return response()->json($posts);
+    }
+
+    /**
+     * Get authors for filter.
+     */
+    public function getAuthors(Request $request)
+    {
+        $authors = \App\Models\User::whereHas('posts', function ($query) {
+            $query->where('status', 'published');
+        })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return response()->json($authors);
+    }
+
+    /**
+     * Get tags for filter.
+     */
+    public function getTags(Request $request)
+    {
+        $tags = Tag::orderBy('name')->get(['id', 'name', 'slug']);
+
+        return response()->json($tags);
+    }
+
+    /**
+     * Get user filter presets.
+     */
+    public function getFilterPresets(Request $request)
+    {
+        $presets = Auth::user()->filterPresets()->orderByDesc('created_at')->get();
+
+        return response()->json($presets);
+    }
+
+    /**
+     * Save filter preset.
+     */
+    public function saveFilterPreset(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'filters' => ['required', 'array'],
+        ]);
+
+        $preset = FilterPreset::create([
+            'user_id' => Auth::id(),
+            'name' => $validated['name'],
+            'filters' => $validated['filters'],
+        ]);
+
+        return response()->json([
+            'preset' => $preset,
+        ]);
+    }
+
+    /**
+     * Load filter preset.
+     */
+    public function loadFilterPreset(FilterPreset $filterPreset)
+    {
+        $this->authorize('view', $filterPreset);
+
+        return response()->json([
+            'filters' => $filterPreset->filters,
+        ]);
+    }
+
+    /**
+     * Delete filter preset.
+     */
+    public function deleteFilterPreset(FilterPreset $filterPreset)
+    {
+        $this->authorize('delete', $filterPreset);
+        $filterPreset->delete();
+
+        return response()->json([
+            'message' => 'Filter preset deleted successfully.',
+        ]);
+    }
+
+    /**
+     * Get post views analytics.
+     */
+    public function getViewsAnalytics(Request $request)
+    {
+        $days = (int) $request->input('days', 30);
+
+        $data = PostView::selectRaw('DATE(viewed_at) as date, COUNT(*) as views')
+            ->where('viewed_at', '>=', now()->subDays($days))
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
+
+        return response()->json($data);
     }
 }

@@ -1,6 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { Head, Link } from '@inertiajs/vue3'
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
 
 defineProps({
     stats: {
@@ -12,6 +14,24 @@ defineProps({
         type: Array,
         default: () => [],
     },
+})
+
+const viewsData = ref([])
+const days = ref(30)
+
+const fetchViewsAnalytics = async () => {
+    try {
+        const response = await axios.get(route('posts.views-analytics'), {
+            params: { days: days.value },
+        })
+        viewsData.value = response.data
+    } catch (error) {
+        console.error('Failed to fetch views analytics:', error)
+    }
+}
+
+onMounted(() => {
+    fetchViewsAnalytics()
 })
 </script>
 
@@ -558,6 +578,87 @@ defineProps({
                         </Link>
                     </div>
 
+                </div>
+
+
+                <!-- ===================================================== -->
+                <!-- Views Analytics Chart -->
+                <!-- ===================================================== -->
+
+                <div
+                    class="rounded-xl bg-white p-6 shadow-sm dark:bg-gray-800"
+                >
+                    <div
+                        class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <div>
+                            <h3
+                                class="text-lg font-semibold text-gray-900 dark:text-white"
+                            >
+                                📈 Post Views Analytics
+                            </h3>
+
+                            <p
+                                class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+                            >
+                                Views over the last {{ days }} days
+                            </p>
+                        </div>
+
+                        <select
+                            v-model="days"
+                            @change="fetchViewsAnalytics"
+                            class="rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                        >
+                            <option :value="7">Last 7 days</option>
+                            <option :value="30">Last 30 days</option>
+                            <option :value="90">Last 90 days</option>
+                        </select>
+                    </div>
+
+                    <div
+                        v-if="viewsData.length"
+                        class="flex items-end gap-1 overflow-x-auto pb-2"
+                    >
+                        <div
+                            v-for="item in viewsData"
+                            :key="item.date"
+                            class="flex flex-1 min-w-[40px] flex-col items-center gap-1"
+                        >
+                            <div
+                                class="w-full rounded-t-lg bg-blue-500 transition-all duration-300 hover:bg-blue-600"
+                                :style="{
+                                    height: `${Math.max((item.views / Math.max(...viewsData.map(d => d.views), 1)) * 200, 4)}px`,
+                                }"
+                                :title="`${item.views} views on ${item.date}`"
+                            ></div>
+
+                            <span
+                                class="text-xs text-gray-500 dark:text-gray-400"
+                            >
+                                {{ new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else
+                        class="py-12 text-center"
+                    >
+                        <div class="mb-4 text-5xl">📊</div>
+
+                        <h3
+                            class="text-lg font-semibold text-gray-900 dark:text-white"
+                        >
+                            No views data available
+                        </h3>
+
+                        <p
+                            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+                        >
+                            Views will appear here once posts are being viewed.
+                        </p>
+                    </div>
                 </div>
 
 
